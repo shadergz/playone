@@ -1,56 +1,54 @@
-use std::mem;
-use std::ops::{Add, Deref};
+use std::mem::size_of;
+use std::ops::{Add, Deref, Rem};
 
-use crate::dram_edo::{PsMemMap, PS_MEM_REGIONS};
-use crate::hard_common::{kibi2byte, REGDword, REGWord};
+use crate::bus;
+use crate::bus::AccessMode;
 
-#[derive(Default)]
-pub struct CpuDeveloperPines {
-    // We want to control every unique cpu cycle, and perform real time operations inside the CPU
-    // for achieve this objective, we need to accumulate the "needed" cycles for doing a CPU
-    // operation like execute a instruction that's will waste 6 cycles or access the memory
-    // properly!
-    cycle_accumulator: u64,
-}
+use crate::dram_edo;
+use crate::psx_comm;
 
-const CPU_CACHE_SIZE: u32 = kibi2byte!(5); // 5KiB of cache size
-const CPU_L1_INST_LIMITS: u32 = kibi2byte!(4); // maximum cache instruction region
+const CACHE_SIZE: u32 = psx_comm::kibi_size!(5); // 5 KiB of cache size
+const _L1_INST_LIMITS: u32 = psx_comm::kibi_size!(4); // maximum cache instruction region
 
 // Risc MIPS addressing cache system map
 // 31-13 tags, 12-5 index, 4-0 offsets
-const CPU_CACHE_LINE_SIZE: u8 = 32; // 32 bytes per cache line
-                                    // Count of lines inside the cache; total = (160) cache lines
-const CPU_CACHE_LINE_COUNT: u32 = CPU_CACHE_SIZE / CPU_CACHE_LINE_SIZE as u32;
+const CACHE_LINE_SIZE: u8 = 32; // 32 bytes per cache line
+                                // Count of lines inside the cache; total = (160) cache lines
+const _CACHE_LINE_COUNT: u32 = CACHE_SIZE / CACHE_LINE_SIZE as u32;
 
 // 4 bits is needed for identifier the data offset
-const CPU_CACHE_WAY_BLOCK_SIZE: u32 = CPU_CACHE_LINE_SIZE as u32 / mem::size_of::<REGWord>() as u32;
+const CACHE_WAY_BLOCK_SIZE: u32 = CACHE_LINE_SIZE as u32 / size_of::<psx_comm::DoubleWord>() as u32;
 
 #[repr(C)]
 #[derive(Default, Clone)]
 struct CpuCacheWay {
-    blocks: [REGWord; CPU_CACHE_WAY_BLOCK_SIZE as usize],
+    blocks: [psx_comm::DoubleWord; CACHE_WAY_BLOCK_SIZE as usize],
 }
 impl Copy for CpuCacheWay {}
 
 // Number of sets: 5120 = X * 2 * 32 [R: 80]
 // 7 bits is needed for identifier the index
 // Count of ways by each cache set; total of sets = 320/
-const CPU_CACHE_WAYS: u8 = 2;
+const CACHE_WAYS: u8 = 2;
 
 #[repr(C)]
 #[derive(Default)]
 struct CpuCacheSets {
-    ways: [CpuCacheWay; CPU_CACHE_WAYS as usize],
+    ways: [CpuCacheWay; CACHE_WAYS as usize],
 }
 
-const CPU_CACHE_SETS_COUNT: u16 = u16::pow(2, 9);
+const _CACHE_SETS_COUNT: u16 = u16::pow(2, 9);
 
-pub struct CpuMipsR3000A {
-    rip: REGDword,
-    debug_hardware: CpuDeveloperPines,
-    l1_cache: [u8; CPU_CACHE_SIZE as usize],
-    cache_miss: usize,
-    cache_hit: usize,
+pub struct R3000A {
+    rip: psx_comm::DoubleWord,
+    _l1_cache: [u8; CACHE_SIZE as usize],
+
+    // 'playone' control information data (Any variables below here isn't implemented by PSX
+    // main hardware)
+    installed_bus: Option<Box<bus::Bus>>,
+    _cache_miss: usize,
+    _cache_hit: usize,
+    cycle_accumulator: u64,
 }
 
 #[repr(C)]
@@ -59,49 +57,80 @@ pub struct CpuInst {
     inst_op: u8,
 }
 
-impl CpuMipsR3000A {
+impl R3000A {
     pub fn new() -> Self {
         Self {
             rip: 0,
-            debug_hardware: Default::default(),
-            l1_cache: [0; CPU_CACHE_SIZE as usize],
-            cache_miss: 0,
-            cache_hit: 0,
+            _l1_cache: [0; CACHE_SIZE as usize],
+
+            installed_bus: None,
+            _cache_miss: 0,
+            _cache_hit: 0,
+            cycle_accumulator: 0,
         }
     }
 
+    pub fn setup_bus(&mut self, bus: &mut Box<bus::Bus>) {
+        self.installed_bus = Some(bus.clone())
+    }
+
     pub fn cpu_power_reset(&mut self) {
-        let ps_mem_bios: &PsMemMap = PS_MEM_REGIONS.get(0).unwrap();
+        let ps_mem_bios: &dram_edo::PsMemMap = dram_edo::PS_MEM_REGIONS.get(0).unwrap();
         self.rip = ps_mem_bios.deref().kseg1;
     }
 
     pub fn perform_cycle(&mut self, cycles_count: u64) {
-        let debug_cycle = &mut self.debug_hardware;
-        // Otherwise cycle_accumulator overflow, Rust will advise for us!
-        debug_cycle.cycle_accumulator = debug_cycle.cycle_accumulator.add(cycles_count);
+        // Before "cycle_accumulator" overflow, Rust will advise for us!
+        self.cycle_accumulator = self.cycle_accumulator.add(cycles_count);
         self.perform_pipeline();
     }
 
     #[inline(always)]
-    fn perform_fetch(&mut self) -> Option<REGDword> {
-        if self.debug_hardware.cycle_accumulator > 0 {
+    fn perform_fetch(&mut self) -> Option<psx_comm::DoubleWord> {
+        if self.cycle_accumulator > 0 {
             return None;
         }
         let ip_fetched = self
-            .read_memory(self.rip, mem::size_of::<REGDword>())
+            .read_memory(self.rip, size_of::<psx_comm::DoubleWord>())
             .unwrap();
         // Pointing to the next RIP location
-        self.rip = self.rip.wrapping_add(mem::size_of::<REGDword>() as u32);
+        self.rip = self
+            .rip
+            .wrapping_add(size_of::<psx_comm::GeneralWord>() as u32);
         Some(ip_fetched)
     }
-    fn read_memory(&mut self, _memory_address: REGDword, read_size: usize) -> Option<REGDword> {
+
+    pub fn read_line(&mut self, mut read_at: u32) -> Vec<u32> {
+        assert_eq!(
+            read_at.rem(CACHE_LINE_SIZE as u32),
+            0,
+            "Un-alignment address reading isn't acceptable"
+        );
+
+        let mut accumulator: Vec<u32> = vec![CACHE_LINE_SIZE as u32; 0];
+        let internal_bus = self.installed_bus.as_mut().unwrap();
+
+        for v_position in 0..3 {
+            read_at = read_at.wrapping_add(size_of::<u32>() as u32);
+            internal_bus.register_access(read_at, 0, AccessMode::ReadDataFrom);
+            accumulator[v_position] = internal_bus.commit_access().unwrap();
+        }
+
+        accumulator
+    }
+
+    fn read_memory(
+        &mut self,
+        _memory_address: psx_comm::DoubleWord,
+        read_size: usize,
+    ) -> Option<psx_comm::DoubleWord> {
         return match read_size {
             _ => None,
         };
     }
 
     #[inline(always)]
-    fn perform_decode(&mut self, _collected_inst: REGDword) -> Option<CpuInst> {
+    fn perform_decode(&mut self, _collected_inst: psx_comm::DoubleWord) -> Option<CpuInst> {
         None
     }
     #[inline(always)]
