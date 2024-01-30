@@ -1,40 +1,40 @@
 use crate::psx_comm;
 
 pub enum PsMemIndex {
-    MemMainMemory,
-    MemExpansionRegion1,
-    MemScratched,
-    MemHardwareRegisters,
-    MemBiosRom,
+    MainMemory,
+    ExpansionRegion1,
+    ScratchPad,
+    HardwareRegisters,
+    BiosRom,
 }
 
 pub struct PsMemMap {
     pub k_used: psx_comm::DoubleWord,
     pub k_seg0: psx_comm::DoubleWord,
     pub k_seg1: psx_comm::DoubleWord,
-    pub region_length: psx_comm::DoubleWord,
+    pub size: psx_comm::DoubleWord,
 }
 
 pub const PS_MEM_REGIONS: [PsMemMap; 5] = [
     PsMemMap {
         k_used: 0x00000000, k_seg0: 0x80000000,
-        k_seg1: 0xa0000000, region_length: psx_comm::kibisz!(2048),
+        k_seg1: 0xa0000000, size: psx_comm::kibisz!(2048),
     },
     PsMemMap {
         k_used: 0x1f000000, k_seg0: 0x9f000000,
-        k_seg1: 0xbf000000, region_length: psx_comm::kibisz!(8192),
+        k_seg1: 0xbf000000, size: psx_comm::kibisz!(8192),
     },
     PsMemMap {
         k_used: 0x1f800000, k_seg0: 0x9f800000,
-        k_seg1: 0xbf800000, region_length: psx_comm::kibisz!(1),
+        k_seg1: 0xbf800000, size: psx_comm::kibisz!(1),
     },
     PsMemMap {
         k_used: 0x1f801000, k_seg0: 0x9f801000,
-        k_seg1: 0xbf801000, region_length: psx_comm::kibisz!(8),
+        k_seg1: 0xbf801000, size: psx_comm::kibisz!(8),
     },
     PsMemMap {
         k_used: 0x1fc00000, k_seg0: 0x9f801000, k_seg1: 0xbfc00000,
-        region_length: psx_comm::kibisz!(512),
+        size: psx_comm::kibisz!(512),
     },
 ];
 
