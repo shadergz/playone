@@ -4,4 +4,4 @@ version = "0.0.2"
 edition = "2021"
 
 [dependencies]
-glium = "*"
+glium = "0.34.0"

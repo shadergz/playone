@@ -1,5 +1,5 @@
 use std::mem::size_of;
-use std::ops::{Add, Deref, Rem};
+use std::ops::{Add, Rem};
 
 use crate::bus;
 use crate::bus::AccessMode;
@@ -7,8 +7,8 @@ use crate::bus::AccessMode;
 use crate::dram_edo;
 use crate::psx_comm;
 
-const CACHE_SIZE: u32 = psx_comm::kibi_size!(5); // 5 KiB of cache size
-const _L1_INST_LIMITS: u32 = psx_comm::kibi_size!(4); // maximum cache instruction region
+const CACHE_SIZE: u32 = psx_comm::kibisz!(5); // 5 KiB of cache size
+const _L1_INST_LIMITS: u32 = psx_comm::kibisz!(4); // Maximum cache instruction region
 
 // Risc MIPS addressing cache system map
 // 31-13 tags, 12-5 index, 4-0 offsets
@@ -27,8 +27,7 @@ struct CpuCacheWay {
 impl Copy for CpuCacheWay {}
 
 // Number of sets: 5120 = X * 2 * 32 [R: 80]
-// 7 bits is needed for identifier the index
-// Count of ways by each cache set; total of sets = 320/
+// 7 bits are needed to identify the index count of ways for each cache set; total sets = 320
 const CACHE_WAYS: u8 = 2;
 
 #[repr(C)]
@@ -42,9 +41,6 @@ const _CACHE_SETS_COUNT: u16 = u16::pow(2, 9);
 pub struct R3000A {
     rip: psx_comm::DoubleWord,
     _l1_cache: [u8; CACHE_SIZE as usize],
-
-    // 'playone' control information data (Any variables below here isn't implemented by PSX
-    // main hardware)
     installed_bus: Option<Box<bus::Bus>>,
     _cache_miss: usize,
     _cache_hit: usize,
@@ -74,9 +70,9 @@ impl R3000A {
         self.installed_bus = Some(bus.clone())
     }
 
-    pub fn cpu_power_reset(&mut self) {
-        let ps_mem_bios: &dram_edo::PsMemMap = dram_edo::PS_MEM_REGIONS.get(0).unwrap();
-        self.rip = ps_mem_bios.deref().kseg1;
+    pub fn cpu_reset(&mut self) {
+        let ps_mem: &dram_edo::PsMemMap = dram_edo::PS_MEM_REGIONS.get(0).unwrap();
+        self.rip = ps_mem.k_seg1;
     }
 
     pub fn perform_cycle(&mut self, cycles_count: u64) {
@@ -94,18 +90,12 @@ impl R3000A {
             .read_memory(self.rip, size_of::<psx_comm::DoubleWord>())
             .unwrap();
         // Pointing to the next RIP location
-        self.rip = self
-            .rip
-            .wrapping_add(size_of::<psx_comm::GeneralWord>() as u32);
+        self.rip = self.rip.wrapping_add(size_of::<psx_comm::GeneralWord>() as u32);
         Some(ip_fetched)
     }
 
     pub fn read_line(&mut self, mut read_at: u32) -> Vec<u32> {
-        assert_eq!(
-            read_at.rem(CACHE_LINE_SIZE as u32),
-            0,
-            "Un-alignment address reading isn't acceptable"
-        );
+        assert_eq!(read_at.rem(CACHE_LINE_SIZE as u32), 0, "Un-alignment address reading isn't acceptable");
 
         let mut accumulator: Vec<u32> = vec![CACHE_LINE_SIZE as u32; 0];
         let internal_bus = self.installed_bus.as_mut().unwrap();

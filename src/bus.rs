@@ -45,9 +45,9 @@ impl Bus {
         let memory_chip = self.installed_memory.as_mut().unwrap();
 
         if self.current_mode == AccessMode::WriteDataInto {
-            memory_chip.write_fast_uint32le(self.address_bus, self.data_bus);
+            memory_chip.write_u32(self.address_bus, self.data_bus);
         } else {
-            Some(self.data_bus = memory_chip.read_fetch_uint32le(self.address_bus));
+            Some(self.data_bus = memory_chip.read_u32(self.address_bus));
         }
         None
     }

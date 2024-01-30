@@ -4,7 +4,6 @@ pub mod mips_cortex;
 pub mod psx_comm;
 
 extern crate glium;
-
 struct PsxConsole {
     central_unit: Box<mips_cortex::R3000A>,
     edo_chip: Box<dram_edo::RamChip>,
@@ -24,21 +23,21 @@ impl PsxConsole {
         }
     }
 
-    pub fn power_on(&mut self) {
+    pub fn start_system(&mut self) {
         self.bus_physical.startup_memory(&mut self.edo_chip);
         self.central_unit.setup_bus(&mut self.bus_physical);
     }
-
-    pub fn hardware_reset(&mut self) {
+    pub fn reset_system(&mut self) {
         let console_cpu = &mut self.central_unit;
-        console_cpu.cpu_power_reset();
+        console_cpu.cpu_reset();
     }
 }
 
 pub fn main() {
-    let mut playone_console = PsxConsole::new();
+    #![allow(unused_parens)]
+    let mut console = PsxConsole::new();
 
-    playone_console.power_on();
-    // Performing a reset signal inside all playstation components/hardware(s)
-    playone_console.hardware_reset();
+    console.start_system();
+    // Performing a reset signal across all PlayOne components/hardware
+    console.reset_system();
 }
