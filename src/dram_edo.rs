@@ -37,7 +37,6 @@ pub const PS_MEM_REGIONS: [PsMemMap; 5] = [
         size: psx_comm::kibisz!(512),
     },
 ];
-
 #[derive(Clone)]
 pub struct RamChip {
     _ram_memory: Box<Vec<u8>>,

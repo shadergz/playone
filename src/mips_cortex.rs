@@ -13,7 +13,7 @@ const _L1_INST_LIMITS: u32 = psx_comm::kibisz!(4); // Maximum cache instruction 
 // Risc MIPS addressing cache system map
 // 31-13 tags, 12-5 index, 4-0 offsets
 const CACHE_LINE_SIZE: u8 = 32; // 32 bytes per cache line
-                                // Count of lines inside the cache; total = (160) cache lines
+// Count of lines inside the cache; total = (160) cache lines
 const _CACHE_LINE_COUNT: u32 = CACHE_SIZE / CACHE_LINE_SIZE as u32;
 
 // 4 bits is needed for identifier the data offset
@@ -37,7 +37,6 @@ struct CpuCacheSets {
 }
 
 const _CACHE_SETS_COUNT: u16 = u16::pow(2, 9);
-
 pub struct R3000A {
     rip: psx_comm::DoubleWord,
     _l1_cache: [u8; CACHE_SIZE as usize],
@@ -69,7 +68,6 @@ impl R3000A {
     pub fn setup_bus(&mut self, bus: &mut Box<bus::Bus>) {
         self.installed_bus = Some(bus.clone())
     }
-
     pub fn cpu_reset(&mut self) {
         let ps_mem: &dram_edo::PsMemMap = dram_edo::PS_MEM_REGIONS.get(0).unwrap();
         self.rip = ps_mem.k_seg1;

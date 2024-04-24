@@ -6,7 +6,6 @@ pub enum AccessMode {
     WriteDataInto,
     ReadDataFrom,
 }
-
 #[derive(Clone)]
 pub struct Bus {
     address_bus: psx_comm::DoubleWord,
@@ -43,7 +42,6 @@ impl Bus {
 
     pub fn commit_access(&mut self) -> Option<psx_comm::DoubleWord> {
         let memory_chip = self.installed_memory.as_mut().unwrap();
-
         if self.current_mode == AccessMode::WriteDataInto {
             memory_chip.write_u32(self.address_bus, self.data_bus);
         } else {
