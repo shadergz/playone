@@ -1,12 +1,12 @@
 pub mod bus;
 pub mod dram_edo;
 pub mod mips_cortex;
-pub mod psx_comm;
+pub mod psx;
 
 extern crate glium;
 struct PsxConsole {
-    central_unit: Box<mips_cortex::R3000A>,
-    edo_chip: Box<dram_edo::RamChip>,
+    cpu: Box<mips_cortex::R3000A>,
+    edo: Box<dram_edo::RamChip>,
     bus_physical: Box<bus::Bus>,
 }
 
@@ -14,22 +14,30 @@ impl PsxConsole {
     pub fn new() -> Self {
         let memory_shared = Box::new(dram_edo::RamChip::new());
         let bus_shared = Box::new(bus::Bus::new());
-        let mips_shared = Box::new(mips_cortex::R3000A::new());
+        let mips_shared = Box::new(mips_cortex::R3000A::default());
 
         Self {
-            edo_chip: memory_shared,
+            edo: memory_shared,
             bus_physical: bus_shared,
-            central_unit: mips_shared,
+            cpu: mips_shared,
         }
     }
 
     pub fn start_system(&mut self) {
-        self.bus_physical.startup_memory(&mut self.edo_chip);
-        self.central_unit.setup_bus(&mut self.bus_physical);
+        self.bus_physical.startup_memory(&mut self.edo);
+        self.cpu.setup_bus(&mut self.bus_physical);
     }
     pub fn reset_system(&mut self) {
-        let console_cpu = &mut self.central_unit;
+        let console_cpu = &mut self.cpu;
         console_cpu.cpu_reset();
+    }
+
+    pub fn run(&mut self) {
+        let mut steps = 10;
+        while steps != 0 {
+            self.cpu.as_mut().perform_cycle(4);
+            steps -= 1;
+        }
     }
 }
 
@@ -40,4 +48,6 @@ pub fn main() {
     console.start_system();
     // Performing a reset signal across all PlayOne components/hardware
     console.reset_system();
+
+    console.run();
 }
